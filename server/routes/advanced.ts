@@ -424,4 +424,188 @@ export function registerAdvancedRoutes(app: express.Express) {
       res.status(500).json({ error: "Failed to fetch work sessions" });
     }
   });
+
+  // ===================== ADVANCED ALGORITHMS ROUTES =====================
+
+  // Calculate driver performance score
+  app.get("/api/admin/drivers/:driverId/score", async (req, res) => {
+    try {
+      const { driverId } = req.params;
+      const score = await advancedDb.calculateDriverScore(driverId);
+      res.json({ driverId, score, maxScore: 100 });
+    } catch (error) {
+      console.error("Error calculating driver score:", error);
+      res.status(500).json({ error: "Failed to calculate driver score" });
+    }
+  });
+
+  // Calculate dynamic commission
+  app.post("/api/admin/calculate-commission", async (req, res) => {
+    try {
+      const { amount, driverId, isPeakHours } = req.body;
+      
+      if (!amount || !driverId) {
+        return res.status(400).json({ error: "amount and driverId are required" });
+      }
+
+      const commission = await advancedDb.calculateCommission(
+        parseFloat(amount),
+        driverId,
+        isPeakHours || false
+      );
+
+      const rate = parseFloat(((commission / parseFloat(amount)) * 100).toFixed(2));
+      res.json({ commission, rate, originalAmount: amount });
+    } catch (error) {
+      console.error("Error calculating commission:", error);
+      res.status(500).json({ error: "Failed to calculate commission" });
+    }
+  });
+
+  // Check if driver should be suspended
+  app.get("/api/admin/drivers/:driverId/suspension-check", async (req, res) => {
+    try {
+      const { driverId } = req.params;
+      const shouldSuspend = await advancedDb.shouldSuspendDriver(driverId);
+      
+      if (shouldSuspend) {
+        await dbStorage.updateDriver(driverId, { isActive: false });
+        res.json({ 
+          shouldSuspend: true, 
+          message: "تم إيقاف السائق تلقائياً بسبب الأداء المنخفض"
+        });
+      } else {
+        res.json({ shouldSuspend: false });
+      }
+    } catch (error) {
+      console.error("Error checking suspension:", error);
+      res.status(500).json({ error: "Failed to check suspension status" });
+    }
+  });
+
+  // Get driver warnings
+  app.get("/api/admin/drivers/:driverId/warnings", async (req, res) => {
+    try {
+      const { driverId } = req.params;
+      const warnings = await advancedDb.getDriverWarnings(driverId);
+      res.json({ driverId, warnings, hasWarnings: warnings.length > 0 });
+    } catch (error) {
+      console.error("Error fetching warnings:", error);
+      res.status(500).json({ error: "Failed to fetch driver warnings" });
+    }
+  });
+
+  // Get top performing drivers
+  app.get("/api/admin/drivers/top-performers/:limit", async (req, res) => {
+    try {
+      const limit = parseInt(req.params.limit) || 10;
+      const topDrivers = await advancedDb.getTopPerformers(limit);
+      res.json(topDrivers);
+    } catch (error) {
+      console.error("Error fetching top performers:", error);
+      res.status(500).json({ error: "Failed to fetch top performers" });
+    }
+  });
+
+  // Get top performing drivers (default 10)
+  app.get("/api/admin/drivers/top-performers", async (req, res) => {
+    try {
+      const topDrivers = await advancedDb.getTopPerformers(10);
+      res.json(topDrivers);
+    } catch (error) {
+      console.error("Error fetching top performers:", error);
+      res.status(500).json({ error: "Failed to fetch top performers" });
+    }
+  });
+
+  // Get all drivers with stats for dashboard
+  app.get("/api/admin/drivers/stats", async (req, res) => {
+    try {
+      const drivers = await dbStorage.getDrivers();
+      const driversWithStats = await Promise.all(
+        drivers.map(async (driver) => {
+          const stats = await advancedDb.getDriverPerformanceStats(driver.id);
+          const warnings = await advancedDb.getDriverWarnings(driver.id);
+          const score = await advancedDb.calculateDriverScore(driver.id);
+          const wallet = await advancedDb.getDriverWallet(driver.id);
+          const withdrawals = await advancedDb.getWithdrawalRequests(driver.id, 'driver');
+
+          return {
+            id: driver.id,
+            name: driver.name,
+            phone: driver.phone,
+            email: driver.email || '',
+            status: driver.isActive ? 'active' : 'inactive',
+            rating: stats.averageRating,
+            totalOrders: stats.totalOrders,
+            completedOrders: stats.completedOrders,
+            cancelledOrders: stats.totalOrders - stats.completedOrders,
+            totalEarnings: stats.totalEarnings,
+            todayEarnings: 0,
+            weeklyEarnings: 0,
+            monthlyEarnings: stats.totalEarnings,
+            avgRating: stats.averageRating,
+            joinDate: driver.createdAt,
+            lastActive: new Date(),
+            isVerified: true,
+            vehicleType: 'bike',
+            vehicleNumber: 'XX-1234',
+            walletBalance: parseFloat(wallet?.balance?.toString() || '0'),
+            withdrawalRequests: withdrawals,
+            warnings,
+            score,
+            performance: {
+              acceptanceRate: 100,
+              onTimeRate: 85,
+              customerSatisfaction: stats.averageRating * 20
+            },
+            documents: []
+          };
+        })
+      );
+
+      res.json(driversWithStats);
+    } catch (error) {
+      console.error("Error fetching drivers stats:", error);
+      res.status(500).json({ error: "Failed to fetch drivers stats" });
+    }
+  });
+
+  // Update driver status
+  app.put("/api/admin/drivers/:driverId/status", async (req, res) => {
+    try {
+      const { driverId } = req.params;
+      const { status } = req.body;
+
+      const isActive = status === 'active';
+      await dbStorage.updateDriver(driverId, { isActive });
+
+      res.json({ success: true, message: "تم تحديث حالة السائق" });
+    } catch (error) {
+      console.error("Error updating driver status:", error);
+      res.status(500).json({ error: "Failed to update driver status" });
+    }
+  });
+
+  // Get driver performance metrics
+  app.get("/api/admin/drivers/:driverId/metrics", async (req, res) => {
+    try {
+      const { driverId } = req.params;
+      const { startDate, endDate } = req.query;
+
+      const stats = await advancedDb.getDriverPerformanceStats(
+        driverId,
+        startDate ? new Date(startDate as string) : undefined,
+        endDate ? new Date(endDate as string) : undefined
+      );
+
+      const score = await advancedDb.calculateDriverScore(driverId);
+      const warnings = await advancedDb.getDriverWarnings(driverId);
+
+      res.json({ stats, score, warnings });
+    } catch (error) {
+      console.error("Error fetching metrics:", error);
+      res.status(500).json({ error: "Failed to fetch metrics" });
+    }
+  });
 }

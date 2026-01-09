@@ -302,4 +302,75 @@ export class AdvancedDatabaseStorage {
       averageOrderValue: restaurantOrders.length > 0 ? totalRevenue / restaurantOrders.length : 0
     };
   }
+
+  async calculateDriverScore(driverId: string): Promise<number> {
+    const metrics = await this.getDriverPerformanceStats(driverId);
+    const rating = parseFloat(metrics.averageRating?.toString() || "0");
+    const completion = metrics.completedOrders / (metrics.totalOrders || 1) * 100;
+    
+    return Math.round((rating / 5 * 35) + (completion / 100 * 30) + (metrics.successRate * 0.35));
+  }
+
+  async calculateCommission(amount: number, driverId: string, isPeakHours: boolean = false): Promise<number> {
+    const metrics = await this.getDriverPerformanceStats(driverId);
+    const rating = parseFloat(metrics.averageRating?.toString() || "0");
+    
+    let rate = 15;
+    if (rating >= 4.5) rate += 3;
+    else if (rating >= 4.0) rate += 2;
+    else if (rating >= 3.5) rate += 1;
+    else if (rating < 3.0) rate -= 2;
+    
+    if (isPeakHours && metrics.totalOrders > 5) rate += 2;
+    
+    rate = Math.max(10, Math.min(25, rate));
+    return parseFloat((amount * (rate / 100)).toFixed(2));
+  }
+
+  async shouldSuspendDriver(driverId: string): Promise<boolean> {
+    const metrics = await this.getDriverPerformanceStats(driverId);
+    const rating = parseFloat(metrics.averageRating?.toString() || "0");
+    const completion = metrics.completedOrders / (metrics.totalOrders || 1) * 100;
+    
+    if (rating < 2.0 && metrics.totalOrders >= 20) return true;
+    if (completion < 50 && metrics.totalOrders >= 50) return true;
+    if (metrics.successRate < 30 && metrics.totalOrders >= 100) return true;
+    return false;
+  }
+
+  async getDriverWarnings(driverId: string): Promise<string[]> {
+    const metrics = await this.getDriverPerformanceStats(driverId);
+    const warnings: string[] = [];
+    
+    if (parseFloat(metrics.averageRating?.toString() || "0") < 3.5) warnings.push("تقييم منخفض");
+    if (metrics.successRate < 70) warnings.push("معدل إنجاز منخفض");
+    if (metrics.totalReviews < 10 && metrics.totalOrders > 50) warnings.push("قلة التقييمات");
+    if (metrics.completedOrders === 0 && metrics.totalOrders > 20) warnings.push("عدم إنجاز أي طلبات");
+    
+    return warnings;
+  }
+
+  async getTopPerformers(limit: number = 10): Promise<any[]> {
+    const driversList = await this.db.select().from(drivers).where(eq(drivers.isActive, true));
+    
+    const driversWithStats = await Promise.all(
+      driversList.map(async (driver: any) => {
+        const stats = await this.getDriverPerformanceStats(driver.id);
+        const score = await this.calculateDriverScore(driver.id);
+        return { driver, stats, score };
+      })
+    );
+
+    return driversWithStats
+      .sort((a: any, b: any) => b.score - a.score)
+      .slice(0, limit);
+  }
+
+  async getAuditLogs(filters: any = {}): Promise<any[]> {
+    return [];
+  }
+
+  async createAuditLog(log: any): Promise<any> {
+    return { ...log, id: 'audit-' + Date.now(), createdAt: new Date() };
+  }
 }
