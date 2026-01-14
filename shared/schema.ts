@@ -3,10 +3,11 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 
-// Users table (customers) - بدون مصادقة
+// Users table (customers)
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   username: varchar("username", { length: 50 }).notNull().unique(),
+  password: text("password"), // إضافة حقل كلمة المرور
   name: text("name").notNull(),
   phone: varchar("phone", { length: 20 }),
   email: varchar("email", { length: 100 }),
@@ -140,15 +141,26 @@ export const specialOffers = pgTable("special_offers", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Admin users table - بدون مصادقة
+// Admin users table
 export const adminUsers = pgTable("admin_users", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: varchar("name", { length: 100 }).notNull(),
   username: varchar("username", { length: 50 }).unique(),
   email: varchar("email", { length: 100 }).notNull().unique(),
+  password: text("password").notNull(), // إضافة حقل كلمة المرور
   phone: varchar("phone", { length: 20 }),
   userType: varchar("user_type", { length: 50 }).default("admin").notNull(),
   isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Admin sessions table
+export const adminSessions = pgTable("admin_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  adminId: uuid("admin_id"),
+  token: text("token").notNull().unique(),
+  userType: varchar("user_type", { length: 50 }).notNull(), // customer, driver, admin
+  expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -400,6 +412,11 @@ export const insertAdminUserSchema = createInsertSchema(adminUsers);
 export const selectAdminUserSchema = createSelectSchema(adminUsers);
 export type AdminUser = z.infer<typeof selectAdminUserSchema>;
 export type InsertAdminUser = z.infer<typeof insertAdminUserSchema>;
+
+export const insertAdminSessionSchema = createInsertSchema(adminSessions);
+export const selectAdminSessionSchema = createSelectSchema(adminSessions);
+export type AdminSession = z.infer<typeof selectAdminSessionSchema>;
+export type InsertAdminSession = z.infer<typeof insertAdminSessionSchema>;
 
 export const insertUiSettingsSchema = createInsertSchema(uiSettings);
 export const selectUiSettingsSchema = createSelectSchema(uiSettings);
