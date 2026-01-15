@@ -51,6 +51,7 @@ export default function AdminRestaurants() {
   const accountDialogRef = useRef<HTMLDivElement>(null);
   const ordersTableRef = useRef<HTMLDivElement>(null);
   const transactionsTableRef = useRef<HTMLDivElement>(null);
+  const mainDialogFormRef = useRef<HTMLFormElement>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -586,6 +587,17 @@ export default function AdminRestaurants() {
     return orderTotal - platformFee;
   };
 
+  // دوال التمرير للنموذج الرئيسي
+  const scrollToMainFormTop = () => {
+    mainDialogFormRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const scrollToMainFormBottom = () => {
+    if (mainDialogFormRef.current) {
+      mainDialogFormRef.current.scrollTo({ top: mainDialogFormRef.current.scrollHeight, behavior: 'smooth' });
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -612,98 +624,474 @@ export default function AdminRestaurants() {
               إضافة مطعم جديد
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>
-                {editingRestaurant ? 'تعديل بيانات المطعم' : 'إضافة مطعم جديد'}
+          <DialogContent className="max-w-2xl h-[90vh] flex flex-col overflow-hidden">
+            <DialogHeader className="flex-shrink-0 p-6 pb-4">
+              <DialogTitle className="flex items-center justify-between">
+                <span>{editingRestaurant ? 'تعديل بيانات المطعم' : 'إضافة مطعم جديد'}</span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={scrollToMainFormTop}
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8"
+                    title="التمرير للأعلى"
+                  >
+                    <ChevronUp className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    onClick={scrollToMainFormBottom}
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8"
+                    title="التمرير للأسفل"
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </div>
               </DialogTitle>
             </DialogHeader>
             
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* ... نفس محتوى النموذج السابق مع إضافة معلومات المالك ... */}
-              <div className="space-y-4 border-t pt-4">
-                <h3 className="text-lg font-semibold text-foreground">معلومات المالك للدفع</h3>
-                
+            <div className="flex-1 overflow-y-auto px-6" ref={mainDialogFormRef}>
+              <form onSubmit={handleSubmit} className="space-y-6 pb-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="ownerName">اسم صاحب المطعم</Label>
+                    <Label htmlFor="name">اسم المطعم</Label>
                     <Input
-                      id="ownerName"
-                      value={formData.ownerName}
-                      onChange={(e) => setFormData(prev => ({ ...prev, ownerName: e.target.value }))}
-                      placeholder="اسم صاحب المطعم"
-                      data-testid="input-restaurant-owner-name"
+                      id="name"
+                      value={formData.name}
+                      onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder="أدخل اسم المطعم"
+                      required
+                      data-testid="input-restaurant-name"
                     />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="phone">رقم هاتف المطعم</Label>
+                    <Input
+                      id="phone"
+                      value={formData.phone}
+                      onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                      placeholder="+967xxxxxxxx"
+                      data-testid="input-restaurant-phone"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="category">القسم</Label>
+                    <Select value={formData.categoryId} onValueChange={(value) => setFormData(prev => ({ ...prev, categoryId: value }))}>
+                      <SelectTrigger data-testid="select-restaurant-category">
+                        <SelectValue placeholder="اختر قسم المطعم" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories?.map((category) => (
+                          <SelectItem key={category.id} value={category.id}>
+                            {category.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   
                   <div>
-                    <Label htmlFor="ownerPhone">هاتف المالك</Label>
+                    <Label htmlFor="platformFeePercentage">نسبة عمولة المنصة (%)</Label>
                     <Input
-                      id="ownerPhone"
-                      value={formData.ownerPhone}
-                      onChange={(e) => setFormData(prev => ({ ...prev, ownerPhone: e.target.value }))}
-                      placeholder="+966xxxxxxxxx"
-                      data-testid="input-restaurant-owner-phone"
+                      id="platformFeePercentage"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.5"
+                      value={formData.platformFeePercentage}
+                      onChange={(e) => setFormData(prev => ({ ...prev, platformFeePercentage: e.target.value }))}
+                      placeholder="نسبة العمولة من كل طلب"
+                      required
+                      data-testid="input-restaurant-platform-fee"
                     />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      النسبة المئوية التي تأخذها المنصة من كل طلب
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="description">الوصف</Label>
+                  <Textarea
+                    id="description"
+                    value={formData.description}
+                    onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                    placeholder="وصف المطعم"
+                    rows={3}
+                    data-testid="input-restaurant-description"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="image">رابط الصورة</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="image"
+                      value={formData.image}
+                      onChange={(e) => setFormData(prev => ({ ...prev, image: e.target.value }))}
+                      placeholder="https://example.com/image.jpg"
+                      required
+                      data-testid="input-restaurant-image"
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => document.getElementById('restaurant-file-upload')?.click()}
+                      data-testid="button-select-image"
+                    >
+                      اختيار صورة
+                    </Button>
+                    <input
+                      id="restaurant-file-upload"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            const result = event.target?.result as string;
+                            setFormData(prev => ({ ...prev, image: result }));
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <Label htmlFor="deliveryTime">وقت التوصيل</Label>
+                    <Input
+                      id="deliveryTime"
+                      value={formData.deliveryTime}
+                      onChange={(e) => setFormData(prev => ({ ...prev, deliveryTime: e.target.value }))}
+                      placeholder="30-45 دقيقة"
+                      required
+                      data-testid="input-restaurant-delivery-time"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="deliveryFee">رسوم التوصيل (ريال)</Label>
+                    <Input
+                      id="deliveryFee"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formData.deliveryFee}
+                      onChange={(e) => setFormData(prev => ({ ...prev, deliveryFee: e.target.value }))}
+                      data-testid="input-restaurant-delivery-fee"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="minimumOrder">الحد الأدنى للطلب (ريال)</Label>
+                    <Input
+                      id="minimumOrder"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formData.minimumOrder}
+                      onChange={(e) => setFormData(prev => ({ ...prev, minimumOrder: e.target.value }))}
+                      data-testid="input-restaurant-minimum-order"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="isOpen">مفتوح للطلبات</Label>
+                  <Switch
+                    id="isOpen"
+                    checked={formData.isOpen}
+                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isOpen: checked }))}
+                    data-testid="switch-restaurant-open"
+                  />
+                </div>
+
+                {/* Restaurant Hours Section */}
+                <div className="space-y-4 border-t pt-4">
+                  <h3 className="text-lg font-semibold text-foreground">أوقات العمل</h3>
+                  
+                  {/* Opening and Closing Times */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="openingTime">وقت الفتح</Label>
+                      <Input
+                        id="openingTime"
+                        type="time"
+                        value={formData.openingTime}
+                        onChange={(e) => setFormData(prev => ({ ...prev, openingTime: e.target.value }))}
+                        data-testid="input-restaurant-opening-time"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="closingTime">وقت الإغلاق</Label>
+                      <Input
+                        id="closingTime"
+                        type="time"
+                        value={formData.closingTime}
+                        onChange={(e) => setFormData(prev => ({ ...prev, closingTime: e.target.value }))}
+                        data-testid="input-restaurant-closing-time"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Working Days */}
+                  <div>
+                    <Label className="text-base font-medium">أيام العمل</Label>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-2">
+                      {[
+                        { value: '0', label: 'الأحد' },
+                        { value: '1', label: 'الإثنين' },
+                        { value: '2', label: 'الثلاثاء' },
+                        { value: '3', label: 'الأربعاء' },
+                        { value: '4', label: 'الخميس' },
+                        { value: '5', label: 'الجمعة' },
+                        { value: '6', label: 'السبت' },
+                      ].map((day) => {
+                        const workingDaysArray = formData.workingDays.split(',').filter(Boolean);
+                        const isChecked = workingDaysArray.includes(day.value);
+                        
+                        return (
+                          <div key={day.value} className="flex items-center space-x-2 space-x-reverse">
+                            <Checkbox
+                              id={`day-${day.value}`}
+                              checked={isChecked}
+                              onCheckedChange={(checked) => {
+                                const currentDays = formData.workingDays.split(',').filter(Boolean);
+                                let newDays;
+                                if (checked) {
+                                  newDays = [...currentDays, day.value].sort((a, b) => parseInt(a) - parseInt(b));
+                                } else {
+                                  newDays = currentDays.filter(d => d !== day.value);
+                                }
+                                setFormData(prev => ({ ...prev, workingDays: newDays.join(',') }));
+                              }}
+                              data-testid={`checkbox-working-day-${day.value}`}
+                            />
+                            <Label
+                              htmlFor={`day-${day.value}`}
+                              className="text-sm font-normal cursor-pointer"
+                            >
+                              {day.label}
+                            </Label>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Temporary Closure */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="isTemporarilyClosed">إغلاق مؤقت</Label>
+                      <Switch
+                        id="isTemporarilyClosed"
+                        checked={formData.isTemporarilyClosed}
+                        onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isTemporarilyClosed: checked }))}
+                        data-testid="switch-restaurant-temporarily-closed"
+                      />
+                    </div>
+                    
+                    {formData.isTemporarilyClosed && (
+                      <div>
+                        <Label htmlFor="temporaryCloseReason">سبب الإغلاق المؤقت</Label>
+                        <Textarea
+                          id="temporaryCloseReason"
+                          value={formData.temporaryCloseReason}
+                          onChange={(e) => setFormData(prev => ({ ...prev, temporaryCloseReason: e.target.value }))}
+                          placeholder="مثال: أعمال صيانة، إجازة، ظروف خاصة..."
+                          rows={2}
+                          data-testid="input-restaurant-temporary-close-reason"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Location and Status Section */}
+                <div className="space-y-4 border-t pt-4">
+                  <h3 className="text-lg font-semibold text-foreground">الموقع والإعدادات</h3>
+                  
+                  {/* Address */}
+                  <div>
+                    <Label htmlFor="address">العنوان</Label>
+                    <Textarea
+                      id="address"
+                      value={formData.address}
+                      onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
+                      placeholder="عنوان المطعم الكامل"
+                      rows={2}
+                      data-testid="input-restaurant-address"
+                    />
+                  </div>
+
+                  {/* Location Coordinates */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="latitude">خط العرض (Latitude)</Label>
+                      <Input
+                        id="latitude"
+                        type="number"
+                        step="any"
+                        value={formData.latitude}
+                        onChange={(e) => setFormData(prev => ({ ...prev, latitude: e.target.value }))}
+                        placeholder="24.7136"
+                        data-testid="input-restaurant-latitude"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="longitude">خط الطول (Longitude)</Label>
+                      <Input
+                        id="longitude"
+                        type="number"
+                        step="any"
+                        value={formData.longitude}
+                        onChange={(e) => setFormData(prev => ({ ...prev, longitude: e.target.value }))}
+                        placeholder="46.6753"
+                        data-testid="input-restaurant-longitude"
+                      />
+                    </div>
                   </div>
                   
-                  <div className="md:col-span-2">
-                    <Label htmlFor="ownerEmail">البريد الإلكتروني (اختياري)</Label>
-                    <Input
-                      id="ownerEmail"
-                      type="email"
-                      value={formData.ownerEmail}
-                      onChange={(e) => setFormData(prev => ({ ...prev, ownerEmail: e.target.value }))}
-                      placeholder="email@example.com"
-                      data-testid="input-restaurant-owner-email"
-                    />
+                  {/* زر تحديد الموقع عبر الخريطة */}
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        const address = formData.address || formData.name;
+                        if (address) {
+                          const encodedAddress = encodeURIComponent(address);
+                          const url = `https://www.google.com/maps/search/?api=1&query=${encodedAddress}`;
+                          window.open(url, '_blank');
+                          toast({
+                            title: "تم فتح الخريطة",
+                            description: "يمكنك نسخ الإحداثيات من الخريطة وإدخالها في الحقول أعلاه",
+                          });
+                        } else {
+                          toast({
+                            title: "أدخل العنوان أولاً",
+                            description: "يرجى إدخال عنوان المطعم للبحث في الخريطة",
+                            variant: "destructive",
+                          });
+                        }
+                      }}
+                      className="flex-1"
+                      data-testid="button-open-maps"
+                    >
+                      <MapPin className="h-4 w-4 mr-2" />
+                      تحديد الموقع عبر الخريطة
+                    </Button>
+                  </div>
+
+                  {/* Status Flags */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="isActive">المطعم مفعل</Label>
+                      <Switch
+                        id="isActive"
+                        checked={formData.isActive}
+                        onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isActive: checked }))}
+                        data-testid="switch-restaurant-active"
+                      />
+                    </div>
+                    
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="isFeatured">مطعم مميز</Label>
+                      <Switch
+                        id="isFeatured"
+                        checked={formData.isFeatured}
+                        onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isFeatured: checked }))}
+                        data-testid="switch-restaurant-featured"
+                      />
+                    </div>
+                    
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="isNew">مطعم جديد</Label>
+                      <Switch
+                        id="isNew"
+                        checked={formData.isNew}
+                        onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isNew: checked }))}
+                        data-testid="switch-restaurant-new"
+                      />
+                    </div>
                   </div>
                 </div>
-                
-                <div>
-                  <Label htmlFor="platformFeePercentage">نسبة عمولة المنصة (%)</Label>
-                  <Input
-                    id="platformFeePercentage"
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.5"
-                    value={formData.platformFeePercentage}
-                    onChange={(e) => setFormData(prev => ({ ...prev, platformFeePercentage: e.target.value }))}
-                    placeholder="نسبة العمولة من كل طلب"
-                    required
-                    data-testid="input-restaurant-platform-fee"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    النسبة المئوية التي تأخذها المنصة من كل طلب
-                  </p>
-                </div>
-              </div>
 
-              <div className="flex gap-2 pt-4">
-                <Button 
-                  type="submit" 
-                  className="flex-1 gap-2"
-                  disabled={createRestaurantMutation.isPending || updateRestaurantMutation.isPending}
-                  data-testid="button-save-restaurant"
-                >
-                  <Save className="h-4 w-4" />
-                  {editingRestaurant ? 'تحديث' : 'إضافة'}
-                </Button>
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={() => {
-                    resetForm();
-                    setIsDialogOpen(false);
-                  }}
-                  data-testid="button-cancel-restaurant"
-                >
-                  <X className="h-4 w-4" />
-                  إلغاء
-                </Button>
-              </div>
-            </form>
+                {/* معلومات المالك للدفع */}
+                <div className="space-y-4 border-t pt-4">
+                  <h3 className="text-lg font-semibold text-foreground">معلومات المالك للدفع</h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="ownerName">اسم صاحب المطعم</Label>
+                      <Input
+                        id="ownerName"
+                        value={formData.ownerName}
+                        onChange={(e) => setFormData(prev => ({ ...prev, ownerName: e.target.value }))}
+                        placeholder="اسم صاحب المطعم"
+                        data-testid="input-restaurant-owner-name"
+                      />
+                    </div>
+                    
+                    <div>
+                      <Label htmlFor="ownerPhone">هاتف المالك</Label>
+                      <Input
+                        id="ownerPhone"
+                        value={formData.ownerPhone}
+                        onChange={(e) => setFormData(prev => ({ ...prev, ownerPhone: e.target.value }))}
+                        placeholder="+966xxxxxxxxx"
+                        data-testid="input-restaurant-owner-phone"
+                      />
+                    </div>
+                    
+                    <div className="md:col-span-2">
+                      <Label htmlFor="ownerEmail">البريد الإلكتروني (اختياري)</Label>
+                      <Input
+                        id="ownerEmail"
+                        type="email"
+                        value={formData.ownerEmail}
+                        onChange={(e) => setFormData(prev => ({ ...prev, ownerEmail: e.target.value }))}
+                        placeholder="email@example.com"
+                        data-testid="input-restaurant-owner-email"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-4 border-t">
+                  <Button 
+                    type="submit" 
+                    className="flex-1 gap-2"
+                    disabled={createRestaurantMutation.isPending || updateRestaurantMutation.isPending}
+                    data-testid="button-save-restaurant"
+                  >
+                    <Save className="h-4 w-4" />
+                    {editingRestaurant ? 'تحديث' : 'إضافة'}
+                  </Button>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => {
+                      resetForm();
+                      setIsDialogOpen(false);
+                    }}
+                    data-testid="button-cancel-restaurant"
+                  >
+                    <X className="h-4 w-4" />
+                    إلغاء
+                  </Button>
+                </div>
+              </form>
+            </div>
           </DialogContent>
         </Dialog>
       </div>
@@ -888,39 +1276,37 @@ export default function AdminRestaurants() {
 
       {/* إحصائيات المطعم Dialog */}
       <Dialog open={isStatsDialogOpen} onOpenChange={setIsStatsDialogOpen}>
-        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
-          <DialogHeader className="sticky top-0 bg-background z-10 p-6 pb-4 border-b">
-            <DialogTitle>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <BarChart className="h-5 w-5" />
-                  إحصائيات المطعم: {selectedRestaurant?.name}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    onClick={scrollToStatsDialogTop}
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8"
-                    title="التمرير للأعلى"
-                  >
-                    <ChevronUp className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    onClick={scrollToStatsDialogBottom}
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8"
-                    title="التمرير للأسفل"
-                  >
-                    <ChevronDown className="h-4 w-4" />
-                  </Button>
-                </div>
+        <DialogContent className="max-w-6xl h-[90vh] flex flex-col overflow-hidden">
+          <DialogHeader className="flex-shrink-0 p-6 pb-4">
+            <DialogTitle className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <BarChart className="h-5 w-5" />
+                إحصائيات المطعم: {selectedRestaurant?.name}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={scrollToStatsDialogTop}
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8"
+                  title="التمرير للأعلى"
+                >
+                  <ChevronUp className="h-4 w-4" />
+                </Button>
+                <Button
+                  onClick={scrollToStatsDialogBottom}
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8"
+                  title="التمرير للأسفل"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
               </div>
             </DialogTitle>
           </DialogHeader>
           
-          <div ref={statsDialogRef} className="flex-1 overflow-y-auto p-6" style={{ maxHeight: 'calc(90vh - 180px)' }}>
+          <div ref={statsDialogRef} className="flex-1 overflow-y-auto px-6" style={{ maxHeight: 'calc(90vh - 180px)' }}>
             {/* Date Range Filter */}
             <Card className="mb-6">
               <CardContent className="p-4">
@@ -1173,7 +1559,7 @@ export default function AdminRestaurants() {
             </Card>
           </div>
           
-          <DialogFooter className="sticky bottom-0 bg-background p-6 pt-4 border-t">
+          <DialogFooter className="flex-shrink-0 p-6 pt-4 border-t">
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <span>الفترة: {dateRange.start} إلى {dateRange.end}</span>
@@ -1202,39 +1588,37 @@ export default function AdminRestaurants() {
 
       {/* إدارة الحساب Dialog */}
       <Dialog open={isAccountDialogOpen} onOpenChange={setIsAccountDialogOpen}>
-        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
-          <DialogHeader className="sticky top-0 bg-background z-10 p-6 pb-4 border-b">
-            <DialogTitle>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Wallet className="h-5 w-5" />
-                  إدارة حساب المطعم: {selectedRestaurant?.name}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    onClick={scrollToAccountDialogTop}
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8"
-                    title="التمرير للأعلى"
-                  >
-                    <ChevronUp className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    onClick={scrollToAccountDialogBottom}
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8"
-                    title="التمرير للأسفل"
-                  >
-                    <ChevronDown className="h-4 w-4" />
-                  </Button>
-                </div>
+        <DialogContent className="max-w-6xl h-[90vh] flex flex-col overflow-hidden">
+          <DialogHeader className="flex-shrink-0 p-6 pb-4">
+            <DialogTitle className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Wallet className="h-5 w-5" />
+                إدارة حساب المطعم: {selectedRestaurant?.name}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={scrollToAccountDialogTop}
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8"
+                  title="التمرير للأعلى"
+                >
+                  <ChevronUp className="h-4 w-4" />
+                </Button>
+                <Button
+                  onClick={scrollToAccountDialogBottom}
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8"
+                  title="التمرير للأسفل"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
               </div>
             </DialogTitle>
           </DialogHeader>
           
-          <div ref={accountDialogRef} className="flex-1 overflow-y-auto p-6" style={{ maxHeight: 'calc(90vh - 180px)' }}>
+          <div ref={accountDialogRef} className="flex-1 overflow-y-auto px-6" style={{ maxHeight: 'calc(90vh - 180px)' }}>
             <Tabs defaultValue="balance" className="w-full">
               <TabsList className="grid w-full grid-cols-3 sticky top-0 bg-background z-10 py-2">
                 <TabsTrigger value="balance">الرصيد والدفع</TabsTrigger>
@@ -1558,7 +1942,7 @@ export default function AdminRestaurants() {
             </Tabs>
           </div>
           
-          <DialogFooter className="sticky bottom-0 bg-background p-6 pt-4 border-t">
+          <DialogFooter className="flex-shrink-0 p-6 pt-4 border-t">
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <span>آخر تحديث: {new Date().toLocaleTimeString('ar-SA')}</span>
