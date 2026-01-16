@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Edit, Trash2, Percent, Save, X, Calendar, DollarSign, Store, MapPin } from 'lucide-react';
+import { Plus, Edit, Trash2, Percent, Save, X, Calendar, DollarSign, Store, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -15,13 +15,26 @@ import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 import type { SpecialOffer, Restaurant } from '@shared/schema';
 
+// تعريف نوع لبيانات النموذج
+interface OfferFormData {
+  title: string;
+  description: string;
+  image: string;
+  discountPercent: string;
+  discountAmount: string;
+  minimumOrder: string;
+  validUntil: string;
+  isActive: boolean;
+  restaurantId: string;
+}
+
 export default function AdminOffers() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [editingOffer, setEditingOffer] = useState<SpecialOffer | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<OfferFormData>({
     title: '',
     description: '',
     image: '',
@@ -30,26 +43,63 @@ export default function AdminOffers() {
     minimumOrder: '0',
     validUntil: '',
     isActive: true,
-    restaurantId: '', // الحقل الجديد لربط العرض بمطعم معين
+    restaurantId: '',
   });
 
-  const { data: offers, isLoading: offersLoading } = useQuery<SpecialOffer[]>({
+  // استعلامات البيانات مع معالجة الأخطاء
+  const { 
+    data: offers, 
+    isLoading: offersLoading, 
+    error: offersError 
+  } = useQuery<SpecialOffer[]>({
     queryKey: ['/api/admin/special-offers'],
+    retry: 2,
   });
 
-  const { data: restaurants, isLoading: restaurantsLoading } = useQuery<Restaurant[]>({
+  const { 
+    data: restaurants, 
+    isLoading: restaurantsLoading, 
+    error: restaurantsError 
+  } = useQuery<Restaurant[]>({
     queryKey: ['/api/admin/restaurants'],
+    retry: 2,
   });
+
+  // التحقق من وجود أخطاء
+  if (offersError || restaurantsError) {
+    console.error('خطأ في تحميل البيانات:', offersError || restaurantsError);
+    
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-red-600 flex items-center gap-2">
+              <AlertCircle className="h-6 w-6" />
+              خطأ في تحميل البيانات
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground mb-4">
+              {offersError?.message || restaurantsError?.message || 'حدث خطأ غير معروف'}
+            </p>
+            <Button onClick={() => window.location.reload()}>
+              إعادة تحميل الصفحة
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const createOfferMutation = useMutation({
-    mutationFn: async (data: typeof formData) => {
+    mutationFn: async (data: OfferFormData) => {
       const submitData = {
         ...data,
         discountPercent: data.discountPercent ? parseInt(data.discountPercent) : null,
         discountAmount: data.discountAmount ? parseFloat(data.discountAmount) : null,
         minimumOrder: parseFloat(data.minimumOrder),
         validUntil: data.validUntil ? new Date(data.validUntil) : null,
-        restaurantId: data.restaurantId || null, // يمكن أن يكون null إذا كان العرض عاماً
+        restaurantId: data.restaurantId || null,
       };
       const response = await apiRequest('POST', '/api/admin/special-offers', submitData);
       return response.json();
@@ -63,10 +113,17 @@ export default function AdminOffers() {
       resetForm();
       setIsDialogOpen(false);
     },
+    onError: (error) => {
+      toast({
+        title: "خطأ",
+        description: `فشل في إنشاء العرض: ${error.message}`,
+        variant: "destructive",
+      });
+    },
   });
 
   const updateOfferMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: typeof formData }) => {
+    mutationFn: async ({ id, data }: { id: string; data: OfferFormData }) => {
       const submitData = {
         ...data,
         discountPercent: data.discountPercent ? parseInt(data.discountPercent) : null,
@@ -88,6 +145,13 @@ export default function AdminOffers() {
       setEditingOffer(null);
       setIsDialogOpen(false);
     },
+    onError: (error) => {
+      toast({
+        title: "خطأ",
+        description: `فشل في تحديث العرض: ${error.message}`,
+        variant: "destructive",
+      });
+    },
   });
 
   const deleteOfferMutation = useMutation({
@@ -100,6 +164,13 @@ export default function AdminOffers() {
       toast({
         title: "تم حذف العرض",
         description: "تم حذف العرض بنجاح",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "خطأ",
+        description: `فشل في حذف العرض: ${error.message}`,
+        variant: "destructive",
       });
     },
   });
@@ -122,14 +193,14 @@ export default function AdminOffers() {
   const handleEdit = (offer: SpecialOffer) => {
     setEditingOffer(offer);
     setFormData({
-      title: offer.title,
-      description: offer.description,
-      image: offer.image,
+      title: offer.title || '',
+      description: offer.description || '',
+      image: offer.image || '',
       discountPercent: offer.discountPercent?.toString() || '',
       discountAmount: offer.discountAmount || '',
       minimumOrder: offer.minimumOrder || '0',
       validUntil: offer.validUntil ? new Date(offer.validUntil).toISOString().slice(0, 16) : '',
-      isActive: offer.isActive,
+      isActive: offer.isActive !== false,
       restaurantId: offer.restaurantId || '',
     });
     setIsDialogOpen(true);
@@ -166,7 +237,18 @@ export default function AdminOffers() {
   const toggleOfferStatus = (offer: SpecialOffer) => {
     updateOfferMutation.mutate({
       id: offer.id,
-      data: { ...formData, isActive: !offer.isActive }
+      data: { 
+        ...formData, 
+        isActive: !offer.isActive,
+        title: offer.title || '',
+        description: offer.description || '',
+        image: offer.image || '',
+        discountPercent: offer.discountPercent?.toString() || '',
+        discountAmount: offer.discountAmount || '',
+        minimumOrder: offer.minimumOrder || '0',
+        validUntil: offer.validUntil ? new Date(offer.validUntil).toISOString().slice(0, 16) : '',
+        restaurantId: offer.restaurantId || '',
+      }
     });
   };
 
@@ -177,21 +259,56 @@ export default function AdminOffers() {
     return restaurant?.name || 'مطعم غير معروف';
   };
 
-  const parseDecimal = (value: string | null): number => {
+  const parseDecimal = (value: string | null | undefined): number => {
     if (!value) return 0;
     const num = parseFloat(value);
     return isNaN(num) ? 0 : num;
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('ar-SA', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return 'دائم';
+    try {
+      return new Date(dateString).toLocaleDateString('ar-SA', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch (error) {
+      return 'تاريخ غير صالح';
+    }
   };
+
+  // حالة التحميل الشاملة
+  if (offersLoading || restaurantsLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 bg-muted rounded animate-pulse" />
+            <div>
+              <div className="h-7 w-48 bg-muted rounded animate-pulse mb-2" />
+              <div className="h-4 w-64 bg-muted rounded animate-pulse" />
+            </div>
+          </div>
+          <div className="h-10 w-40 bg-muted rounded animate-pulse" />
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[...Array(6)].map((_, i) => (
+            <Card key={i} className="animate-pulse">
+              <div className="w-full h-48 bg-muted" />
+              <CardContent className="p-4">
+                <div className="h-4 bg-muted rounded w-3/4 mb-2" />
+                <div className="h-3 bg-muted rounded w-1/2" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -437,17 +554,7 @@ export default function AdminOffers() {
 
       {/* Offers Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {offersLoading || restaurantsLoading ? (
-          [...Array(6)].map((_, i) => (
-            <Card key={i} className="animate-pulse">
-              <div className="w-full h-48 bg-muted" />
-              <CardContent className="p-4">
-                <div className="h-4 bg-muted rounded w-3/4 mb-2" />
-                <div className="h-3 bg-muted rounded w-1/2" />
-              </CardContent>
-            </Card>
-          ))
-        ) : offers?.length ? (
+        {offers && offers.length > 0 ? (
           offers.map((offer) => (
             <Card key={offer.id} className="hover:shadow-md transition-shadow overflow-hidden">
               <div className="w-full h-48 bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center relative">
@@ -472,9 +579,9 @@ export default function AdminOffers() {
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <CardTitle className="text-lg mb-2">{offer.title}</CardTitle>
+                    <CardTitle className="text-lg mb-2">{offer.title || 'عنوان غير محدد'}</CardTitle>
                     <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
-                      {offer.description}
+                      {offer.description || 'لا يوجد وصف'}
                     </p>
                     
                     {/* عرض اسم المطعم المربوط */}
@@ -508,20 +615,18 @@ export default function AdminOffers() {
                   <div className="text-xs text-muted-foreground">
                     أقل طلب: {parseDecimal(offer.minimumOrder)} ريال
                   </div>
-                  {offer.validUntil && (
-                    <div className="flex items-center gap-1">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-xs">
-                        {formatDate(offer.validUntil)}
-                      </span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-1">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-xs">
+                      {formatDate(offer.validUntil)}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="text-center">
                   <p className="text-xs text-muted-foreground">نشط</p>
                   <Switch
-                    checked={offer.isActive}
+                    checked={offer.isActive !== false}
                     onCheckedChange={() => toggleOfferStatus(offer)}
                     data-testid={`switch-offer-active-${offer.id}`}
                   />
@@ -587,13 +692,19 @@ export default function AdminOffers() {
         ) : (
           <div className="col-span-full text-center py-12">
             <Percent className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-foreground mb-2">لا توجد عروض</h3>
+            <h3 className="text-lg font-semibold text-foreground mb-2">
+              {offersLoading || restaurantsLoading ? 'جاري التحميل...' : 'لا توجد عروض'}
+            </h3>
             <p className="text-muted-foreground mb-4">
-              ابدأ بإضافة عروض خاصة لجذب العملاء إلى المطاعم
+              {offersLoading || restaurantsLoading 
+                ? 'جاري تحميل العروض والمطاعم...' 
+                : 'ابدأ بإضافة عروض خاصة لجذب العملاء إلى المطاعم'}
             </p>
-            <Button onClick={() => setIsDialogOpen(true)} data-testid="button-add-first-offer">
-              إضافة العرض الأول
-            </Button>
+            {!(offersLoading || restaurantsLoading) && (
+              <Button onClick={() => setIsDialogOpen(true)} data-testid="button-add-first-offer">
+                إضافة العرض الأول
+              </Button>
+            )}
           </div>
         )}
       </div>
