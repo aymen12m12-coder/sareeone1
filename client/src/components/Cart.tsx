@@ -13,7 +13,14 @@ import { useCart } from '../contexts/CartContext';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 import type { InsertOrder, Restaurant } from '@shared/schema';
-
+// أضف هذه السطور مع الاستيرادات الأخرى
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 export default function Cart() {
   const [, setLocation] = useLocation();
   const { state, removeItem, updateQuantity, clearCart } = useCart();
