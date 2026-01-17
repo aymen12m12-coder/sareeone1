@@ -119,6 +119,18 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       path: '/admin/ui-settings',
       description: 'إدارة إعدادات التطبيق والواجهة'
     },
+    { 
+      icon: Truck, 
+      label: 'رسوم التوصيل', 
+      path: '/admin/delivery-fees',
+      description: 'إدارة طرق حساب رسوم التوصيل'
+    },
+    { 
+      icon: DollarSign, 
+      label: 'حسابات المطاعم', 
+      path: '/admin/restaurant-accounts',
+      description: 'إدارة إيرادات وسحوبات المطاعم'
+    },
   ];
 
   const handleNavigation = (path: string) => {
