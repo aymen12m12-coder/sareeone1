@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Package, CheckCircle, XCircle, Phone, MapPin, Filter, Navigation, Search, Truck, Store } from 'lucide-react';
+import { Package, CheckCircle, XCircle, Phone, MapPin, Filter, Navigation, Search, Truck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
-import type { Order, Driver, Restaurant } from '@shared/schema';
+import type { Order, Driver } from '@shared/schema';
 
 export default function AdminOrders() {
   const { toast } = useToast();
@@ -17,16 +17,12 @@ export default function AdminOrders() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDriver, setSelectedDriver] = useState<Record<string, string>>({});
 
-  const { data: orders, isLoading: ordersLoading } = useQuery<Order[]>({
-    queryKey: ['/api/orders'],
+  const { data: orders, isLoading } = useQuery<Order[]>({
+    queryKey: statusFilter !== 'all' ? ['/api/orders', statusFilter] : ['/api/orders'],
   });
 
-  const { data: drivers, isLoading: driversLoading } = useQuery<Driver[]>({
+  const { data: drivers } = useQuery<Driver[]>({
     queryKey: ['/api/drivers'],
-  });
-
-  const { data: restaurants, isLoading: restaurantsLoading } = useQuery<Restaurant[]>({
-    queryKey: ['/api/restaurants'],
   });
 
   const updateOrderStatusMutation = useMutation({
@@ -39,13 +35,6 @@ export default function AdminOrders() {
       toast({
         title: "تم تحديث حالة الطلب",
         description: "تم تحديث حالة الطلب بنجاح",
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "خطأ في تحديث الحالة",
-        description: error.message || "فشل تحديث حالة الطلب",
-        variant: "destructive",
       });
     },
   });
@@ -62,13 +51,6 @@ export default function AdminOrders() {
         description: "تم توجيه الطلب للسائق بنجاح",
       });
     },
-    onError: (error) => {
-      toast({
-        title: "خطأ في تعيين السائق",
-        description: error.message || "فشل تعيين السائق",
-        variant: "destructive",
-      });
-    },
   });
 
   const getOrderItems = (itemsString: string) => {
@@ -77,11 +59,6 @@ export default function AdminOrders() {
     } catch {
       return [];
     }
-  };
-
-  const getRestaurantInfo = (restaurantId: string) => {
-    const restaurant = restaurants?.find(r => r.id === restaurantId);
-    return restaurant || null;
   };
 
   const getStatusBadge = (status: string) => {
@@ -95,7 +72,7 @@ export default function AdminOrders() {
     };
     
     const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.pending;
-    return <Badge className={`${config.color} text-white hover:${config.color}`}>{config.label}</Badge>;
+    return <Badge className={`${config.color} hover:${config.color}`}>{config.label}</Badge>;
   };
 
   const getNextStatus = (currentStatus: string) => {
@@ -118,32 +95,19 @@ export default function AdminOrders() {
     return labels[currentStatus as keyof typeof labels];
   };
 
-  const parseDecimal = (value: string | number | null | undefined): number => {
-    if (value === null || value === undefined) return 0;
-    if (typeof value === 'number') return value;
-    const num = parseFloat(value);
-    return isNaN(num) ? 0 : num;
-  };
-
   const filteredOrders = orders?.filter(order => {
     if (statusFilter === 'all') return true;
     return order.status === statusFilter;
   }).filter(order => {
     if (!searchTerm) return true;
     const search = searchTerm.toLowerCase();
-    const restaurantInfo = getRestaurantInfo(order.restaurantId);
-    
     return (
       order.customerName?.toLowerCase().includes(search) ||
       order.customerPhone?.toLowerCase().includes(search) ||
       order.id?.toLowerCase().includes(search) ||
-      order.deliveryAddress?.toLowerCase().includes(search) ||
-      restaurantInfo?.name?.toLowerCase().includes(search) ||
-      order.orderNumber?.toLowerCase().includes(search)
+      order.deliveryAddress?.toLowerCase().includes(search)
     );
   });
-
-  const isLoading = ordersLoading || driversLoading || restaurantsLoading;
 
   return (
     <div className="space-y-6">
@@ -159,7 +123,7 @@ export default function AdminOrders() {
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6">
-        {/* القائمة الجانبية للفرز */}
+        {/* القائمة الجانبية للفرز - ثابتة عند التمرير */}
         <div className="lg:w-64 flex-shrink-0">
           <div className="lg:sticky lg:top-24 space-y-4">
             <Card>
@@ -243,14 +207,6 @@ export default function AdminOrders() {
                     <span>جديد:</span>
                     <span className="font-bold">{orders?.filter(o => o.status === 'pending').length || 0}</span>
                   </div>
-                  <div className="flex justify-between text-blue-600">
-                    <span>في الطريق:</span>
-                    <span className="font-bold">{orders?.filter(o => o.status === 'on_way').length || 0}</span>
-                  </div>
-                  <div className="flex justify-between text-green-600">
-                    <span>مكتملة:</span>
-                    <span className="font-bold">{orders?.filter(o => o.status === 'delivered').length || 0}</span>
-                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -265,7 +221,7 @@ export default function AdminOrders() {
               <div className="relative">
                 <Search className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="البحث في الطلبات (الاسم، الهاتف، رقم الطلب، العنوان، المطعم)..."
+                  placeholder="البحث في الطلبات (الاسم، الهاتف، رقم الطلب، العنوان)..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pr-10"
@@ -298,10 +254,6 @@ export default function AdminOrders() {
                 const items = getOrderItems(order.items);
                 const nextStatus = getNextStatus(order.status || 'pending');
                 const nextStatusLabel = getNextStatusLabel(order.status || 'pending');
-                const restaurantInfo = getRestaurantInfo(order.restaurantId);
-                const deliveryFee = parseDecimal(order.deliveryFee);
-                const subtotal = parseDecimal(order.subtotal);
-                const totalAmount = parseDecimal(order.totalAmount);
                 
                 return (
                   <Card key={order.id} className="hover:shadow-md transition-shadow">
@@ -312,7 +264,7 @@ export default function AdminOrders() {
                             <Package className="h-6 w-6 text-primary" />
                           </div>
                           <div>
-                            <CardTitle className="text-lg">طلب #{order.orderNumber || order.id}</CardTitle>
+                            <CardTitle className="text-lg">طلب #{order.id}</CardTitle>
                             <p className="text-sm text-muted-foreground">
                               {new Date(order.createdAt).toLocaleDateString('ar-YE', {
                                 year: 'numeric',
@@ -329,30 +281,6 @@ export default function AdminOrders() {
                     </CardHeader>
                     
                     <CardContent className="space-y-4">
-                      {/* Restaurant Info */}
-                      {restaurantInfo && (
-                        <div className="p-3 bg-muted/30 rounded-lg border">
-                          <div className="flex items-center gap-3">
-                            <Store className="h-5 w-5 text-primary" />
-                            <div>
-                              <h4 className="font-semibold text-foreground">{restaurantInfo.name}</h4>
-                              {restaurantInfo.phone && (
-                                <p className="text-sm text-muted-foreground">
-                                  <Phone className="h-3 w-3 inline mr-1" />
-                                  {restaurantInfo.phone}
-                                </p>
-                              )}
-                              {restaurantInfo.address && (
-                                <p className="text-sm text-muted-foreground">
-                                  <MapPin className="h-3 w-3 inline mr-1" />
-                                  {restaurantInfo.address}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
                       {/* Customer Info */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
                         <div>
@@ -362,11 +290,6 @@ export default function AdminOrders() {
                             <Phone className="h-4 w-4 text-muted-foreground" />
                             <span className="text-sm text-muted-foreground">{order.customerPhone}</span>
                           </div>
-                          {order.customerEmail && (
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-sm text-muted-foreground">{order.customerEmail}</span>
-                            </div>
-                          )}
                         </div>
                         <div>
                           <h4 className="font-semibold text-foreground mb-2">عنوان التوصيل</h4>
@@ -374,11 +297,6 @@ export default function AdminOrders() {
                             <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
                             <span className="text-sm text-muted-foreground">{order.deliveryAddress}</span>
                           </div>
-                          {order.customerLocationLat && order.customerLocationLng && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              الإحداثيات: {order.customerLocationLat}, {order.customerLocationLng}
-                            </p>
-                          )}
                         </div>
                       </div>
 
@@ -389,29 +307,23 @@ export default function AdminOrders() {
                           {items.map((item: any, index: number) => (
                             <div key={index} className="flex justify-between items-center text-sm">
                               <span className="text-foreground">{item.name} × {item.quantity}</span>
-                              <span className="text-muted-foreground">{parseDecimal(item.price) * item.quantity} ريال</span>
+                              <span className="text-muted-foreground">{item.price * item.quantity} ريال</span>
                             </div>
                           ))}
                         </div>
                         
-                        <div className="border-t border-border mt-2 pt-2 space-y-1">
+                        <div className="border-t border-border mt-2 pt-2">
                           <div className="flex justify-between items-center text-sm">
                             <span className="text-muted-foreground">المجموع الفرعي:</span>
-                            <span className="text-foreground">{subtotal} ريال</span>
+                            <span className="text-foreground">{order.subtotal} ريال</span>
                           </div>
                           <div className="flex justify-between items-center text-sm">
                             <span className="text-muted-foreground">رسوم التوصيل:</span>
-                            <span className="text-foreground">{deliveryFee} ريال</span>
+                            <span className="text-foreground">{order.deliveryFee} ريال</span>
                           </div>
-                          {parseDecimal(order.discountAmount) > 0 && (
-                            <div className="flex justify-between items-center text-sm">
-                              <span className="text-muted-foreground">الخصم:</span>
-                              <span className="text-red-600">-{parseDecimal(order.discountAmount)} ريال</span>
-                            </div>
-                          )}
-                          <div className="flex justify-between items-center font-semibold border-t pt-2 mt-2">
+                          <div className="flex justify-between items-center font-semibold">
                             <span className="text-foreground">المجموع:</span>
-                            <span className="text-primary">{totalAmount} ريال</span>
+                            <span className="text-primary">{order.totalAmount} ريال</span>
                           </div>
                         </div>
                       </div>
@@ -421,16 +333,8 @@ export default function AdminOrders() {
                         <div>
                           <h4 className="font-semibold text-foreground mb-1">طريقة الدفع</h4>
                           <p className="text-sm text-muted-foreground">
-                            {order.paymentMethod === 'cash' ? 'دفع نقدي' : 
-                             order.paymentMethod === 'wallet' ? 'الدفع من الرصيد' : 
-                             order.paymentMethod === 'digital' ? 'محفظة إلكترونية' : 
-                             order.paymentMethod === 'card' ? 'دفع إلكتروني' : 'غير محدد'}
+                            {order.paymentMethod === 'cash' ? 'دفع نقدي' : 'مدفوع مسبقاً'}
                           </p>
-                          {order.paymentStatus && (
-                            <Badge className="mt-1" variant={order.paymentStatus === 'paid' ? 'default' : 'outline'}>
-                              {order.paymentStatus === 'paid' ? 'مدفوع' : 'غير مدفوع'}
-                            </Badge>
-                          )}
                         </div>
                         {order.notes && (
                           <div>
@@ -442,7 +346,7 @@ export default function AdminOrders() {
 
                       {/* Actions */}
                       <div className="flex flex-wrap gap-2 pt-4 border-t border-border">
-                        {order.status === 'confirmed' && !order.driverId && drivers && drivers.length > 0 && (
+                        {order.status === 'confirmed' && !order.driverId && (
                           <div className="flex items-center gap-2 w-full md:w-auto">
                             <Select 
                               value={selectedDriver[order.id] || ''} 
@@ -453,28 +357,17 @@ export default function AdminOrders() {
                               </SelectTrigger>
                               <SelectContent>
                                 {drivers?.filter(d => d.isAvailable).map(driver => (
-                                  <SelectItem key={driver.id} value={driver.id}>{driver.name} - {driver.vehicleType || 'سيارة'}</SelectItem>
+                                  <SelectItem key={driver.id} value={driver.id}>{driver.name}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
                             <Button
-                              onClick={() => {
-                                if (!selectedDriver[order.id]) {
-                                  toast({
-                                    title: "اختر سائقاً",
-                                    description: "يرجى اختيار سائق أولاً",
-                                    variant: "destructive"
-                                  });
-                                  return;
-                                }
-                                assignDriverMutation.mutate({ id: order.id, driverId: selectedDriver[order.id] });
-                              }}
+                              onClick={() => assignDriverMutation.mutate({ id: order.id, driverId: selectedDriver[order.id] })}
                               disabled={!selectedDriver[order.id] || assignDriverMutation.isPending}
                               className="gap-2"
-                              data-testid={`button-assign-driver-${order.id}`}
                             >
                               <Truck className="h-4 w-4" />
-                              {assignDriverMutation.isPending ? 'جاري التعيين...' : 'تعيين سائق'}
+                              تعيين سائق
                             </Button>
                           </div>
                         )}
@@ -490,21 +383,17 @@ export default function AdminOrders() {
                             data-testid={`button-update-order-${order.id}`}
                           >
                             <CheckCircle className="h-4 w-4" />
-                            {updateOrderStatusMutation.isPending ? 'جاري التحديث...' : nextStatusLabel}
+                            {nextStatusLabel}
                           </Button>
                         )}
                         
                         {order.status === 'pending' && (
                           <Button
                             variant="destructive"
-                            onClick={() => {
-                              if (confirm('هل أنت متأكد من إلغاء هذا الطلب؟')) {
-                                updateOrderStatusMutation.mutate({ 
-                                  id: order.id, 
-                                  status: 'cancelled' 
-                                });
-                              }
-                            }}
+                            onClick={() => updateOrderStatusMutation.mutate({ 
+                              id: order.id, 
+                              status: 'cancelled' 
+                            })}
                             disabled={updateOrderStatusMutation.isPending}
                             className="gap-2"
                             data-testid={`button-cancel-order-${order.id}`}
@@ -523,18 +412,6 @@ export default function AdminOrders() {
                           <Phone className="h-4 w-4" />
                           اتصال بالعميل
                         </Button>
-                        
-                        {restaurantInfo?.phone && (
-                          <Button
-                            variant="outline"
-                            onClick={() => window.open(`tel:${restaurantInfo.phone}`)}
-                            className="gap-2"
-                            data-testid={`button-call-restaurant-${order.id}`}
-                          >
-                            <Store className="h-4 w-4" />
-                            اتصال بالمطعم
-                          </Button>
-                        )}
                         
                         <Button
                           variant="outline"

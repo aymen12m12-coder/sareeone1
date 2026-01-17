@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ArrowRight, Trash2, MapPin, Calendar, Clock, DollarSign, Plus, Minus, ShoppingCart } from 'lucide-react';
+import { ArrowRight, Trash2, MapPin, Calendar, Clock, DollarSign, Plus, Minus, ShoppingCart, Loader2 } from 'lucide-react';
 import { LocationPicker, LocationData } from '@/components/LocationPicker';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -12,28 +12,26 @@ import { Label } from '@/components/ui/label';
 import { useCart } from '../contexts/CartContext';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
-import type { InsertOrder, Restaurant } from '@shared/schema';
+import type { InsertOrder } from '@shared/schema';
+
+interface DeliveryFeeResult {
+  fee: number;
+  distance: number;
+  estimatedTime: string;
+  isFreeDelivery: boolean;
+  freeDeliveryReason?: string;
+}
 
 export default function Cart() {
   const [, setLocation] = useLocation();
   const { state, removeItem, updateQuantity, clearCart } = useCart();
   const { items, subtotal } = state;
   const { toast } = useToast();
-
-  // الحصول على بيانات المطعم لرسوم التوصيل
-  const restaurantId = items[0]?.restaurantId;
-  const { data: restaurantData } = useQuery<Restaurant>({
-    queryKey: ['/api/restaurants', restaurantId],
-    enabled: !!restaurantId,
-  });
-
-  // حساب رسوم التوصيل بناءً على المطعم
-  const deliveryFee = restaurantData?.deliveryFee 
-    ? parseFloat(restaurantData.deliveryFee) 
-    : items.length > 0 ? 5 : 0;
-
-  // حساب الإجمالي
-  const total = items.length > 0 ? subtotal + deliveryFee : 0;
+  
+  // حالة رسوم التوصيل
+  const [deliveryFee, setDeliveryFee] = useState<number>(5);
+  const [deliveryInfo, setDeliveryInfo] = useState<DeliveryFeeResult | null>(null);
+  const [isCalculatingFee, setIsCalculatingFee] = useState(false);
 
   const [orderForm, setOrderForm] = useState({
     customerName: '',
@@ -42,19 +40,40 @@ export default function Cart() {
     deliveryAddress: '',
     notes: '',
     paymentMethod: 'cash',
-    deliveryTime: 'now',
+    deliveryTime: 'now', // 'now' or 'later'
     deliveryDate: '',
     deliveryTimeSlot: '',
     locationData: null as LocationData | null,
   });
 
-  // تحديث رسوم التوصيل عند تغيير المطعم
-  useEffect(() => {
-    if (restaurantData && items.length > 0) {
-      const fee = restaurantData.deliveryFee ? parseFloat(restaurantData.deliveryFee) : 5;
-      // يمكنك إضافة منطق إضافي هنا إذا لزم الأمر
+  // حساب الإجمالي الجديد مع رسوم التوصيل الديناميكية
+  const total = subtotal + (deliveryInfo?.isFreeDelivery ? 0 : deliveryFee);
+
+  // حساب رسوم التوصيل عند تحديد الموقع
+  const calculateDeliveryFeeMutation = useMutation({
+    mutationFn: async (data: { customerLat: number; customerLng: number; restaurantId: string; orderSubtotal: number }) => {
+      const response = await apiRequest('POST', '/api/delivery-fees/calculate', data);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        setDeliveryFee(data.fee);
+        setDeliveryInfo({
+          fee: data.fee,
+          distance: data.distance,
+          estimatedTime: data.estimatedTime,
+          isFreeDelivery: data.isFreeDelivery,
+          freeDeliveryReason: data.freeDeliveryReason
+        });
+      }
+      setIsCalculatingFee(false);
+    },
+    onError: () => {
+      setIsCalculatingFee(false);
+      // استخدام رسوم افتراضية في حالة الخطأ
+      setDeliveryFee(5);
     }
-  }, [restaurantData, items]);
+  });
 
   // Handle location selection from LocationPicker
   const handleLocationSelect = (location: LocationData) => {
@@ -63,63 +82,46 @@ export default function Cart() {
       deliveryAddress: location.address,
       locationData: location,
     }));
+
+    // حساب رسوم التوصيل بناءً على الموقع
+    if (items.length > 0 && items[0].restaurantId) {
+      setIsCalculatingFee(true);
+      calculateDeliveryFeeMutation.mutate({
+        customerLat: location.lat,
+        customerLng: location.lng,
+        restaurantId: items[0].restaurantId,
+        orderSubtotal: subtotal
+      });
+    }
   };
 
   const placeOrderMutation = useMutation({
     mutationFn: async (orderData: InsertOrder) => {
       const response = await apiRequest('POST', '/api/orders', orderData);
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'فشل في تأكيد الطلب');
-      }
       return response.json();
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       toast({
         title: "تم تأكيد طلبك بنجاح!",
         description: "سيتم التواصل معك قريباً",
       });
       clearCart();
-      // توجيه لصفحة تتبع الطلب
-      if (data?.order?.id) {
-        setLocation(`/order-tracking/${data.order.id}`);
-      } else {
-        setLocation('/');
-      }
+      setLocation('/');
     },
-    onError: (error: Error) => {
+    onError: () => {
       toast({
         title: "خطأ في تأكيد الطلب",
-        description: error.message || "يرجى المحاولة مرة أخرى",
+        description: "يرجى المحاولة مرة أخرى",
         variant: "destructive",
       });
     },
   });
 
   const handlePlaceOrder = () => {
-    // التحقق من البيانات المطلوبة
-    if (!orderForm.customerName.trim()) {
+    if (!orderForm.customerName || !orderForm.customerPhone || !orderForm.deliveryAddress) {
       toast({
         title: "معلومات ناقصة",
-        description: "يرجى إدخال اسم العميل",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!orderForm.customerPhone.trim()) {
-      toast({
-        title: "معلومات ناقصة",
-        description: "يرجى إدخال رقم الهاتف",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!orderForm.deliveryAddress.trim()) {
-      toast({
-        title: "معلومات ناقصة",
-        description: "يرجى تحديد عنوان التوصيل",
+        description: "يرجى ملء جميع الحقول المطلوبة",
         variant: "destructive",
       });
       return;
@@ -134,42 +136,30 @@ export default function Cart() {
       return;
     }
 
-    // التحقق من الحد الأدنى للطلب
-    if (restaurantData?.minimumOrder && subtotal < parseFloat(restaurantData.minimumOrder)) {
-      toast({
-        title: "الحد الأدنى للطلب غير متوفر",
-        description: `الحد الأدنى للطلب من هذا المطعم هو ${restaurantData.minimumOrder} ريال`,
-        variant: "destructive",
-      });
-      return;
-    }
+    // حساب رسوم التوصيل النهائية
+    const finalDeliveryFee = deliveryInfo?.isFreeDelivery ? 0 : deliveryFee;
+    const finalTotal = subtotal + finalDeliveryFee;
 
     const orderData: InsertOrder = {
       ...orderForm,
       items: JSON.stringify(items),
       subtotal: subtotal.toString(),
-      deliveryFee: deliveryFee.toString(),
-      total: total.toString(),
-      totalAmount: total.toString(),
+      deliveryFee: finalDeliveryFee.toString(),
+      total: finalTotal.toString(),
+      totalAmount: finalTotal.toString(),
       restaurantId: items[0]?.restaurantId || '',
       status: 'pending',
       orderNumber: `ORD${Date.now()}`,
-      customerLocationLat: orderForm.locationData?.lat?.toString(),
-      customerLocationLng: orderForm.locationData?.lng?.toString(),
-      customerEmail: orderForm.customerEmail || undefined,
-      notes: orderForm.notes || undefined,
-      deliveryDate: orderForm.deliveryDate || undefined,
-      deliveryTimeSlot: orderForm.deliveryTimeSlot || undefined,
+      // إضافة إحداثيات العميل للتوصيل الدقيق
+      customerLocationLat: orderForm.locationData?.lat?.toString() || null,
+      customerLocationLng: orderForm.locationData?.lng?.toString() || null,
+      // إضافة وقت التوصيل المقدر
+      estimatedTime: deliveryInfo?.estimatedTime || '30-45 دقيقة',
     };
 
     placeOrderMutation.mutate(orderData);
   };
 
-  const parsePrice = (price: string | number): number => {
-    if (typeof price === 'number') return price;
-    const num = parseFloat(price);
-    return isNaN(num) ? 0 : num;
-  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -192,11 +182,7 @@ export default function Cart() {
             variant="ghost" 
             size="icon" 
             className="text-white hover:bg-white/20"
-            onClick={() => {
-              if (confirm('هل تريد تفريغ السلة؟')) {
-                clearCart();
-              }
-            }}
+            onClick={clearCart}
             data-testid="button-clear-cart"
           >
             <Trash2 className="h-5 w-5" />
@@ -226,7 +212,7 @@ export default function Cart() {
                         {item.name}
                       </h4>
                       <p className="text-sm font-bold text-gray-900" data-testid={`cart-item-price-${item.id}`}>
-                        {parsePrice(item.price)} ريال
+                        {item.price}ريال
                       </p>
                     </div>
 
@@ -235,13 +221,7 @@ export default function Cart() {
                         size="icon"
                         variant="outline"
                         className="w-6 h-6"
-                        onClick={() => {
-                          if (item.quantity > 1) {
-                            updateQuantity(item.id, item.quantity - 1);
-                          } else {
-                            removeItem(item.id);
-                          }
-                        }}
+                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
                         data-testid={`button-decrease-${item.id}`}
                       >
                         <Minus className="h-3 w-3" />
@@ -280,41 +260,24 @@ export default function Cart() {
           <CardContent className="p-4">
             <h3 className="font-semibold text-gray-800 mb-4">معلومات العميل</h3>
             <div className="space-y-4">
-              <div>
-                <Label htmlFor="customerName" className="text-sm font-medium text-gray-700 mb-1">الاسم *</Label>
-                <Input
-                  id="customerName"
-                  placeholder="أدخل اسمك الكامل"
-                  value={orderForm.customerName}
-                  onChange={(e) => setOrderForm(prev => ({ ...prev, customerName: e.target.value }))}
-                  data-testid="input-customer-name"
-                  required
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="customerPhone" className="text-sm font-medium text-gray-700 mb-1">رقم الهاتف *</Label>
-                <Input
-                  id="customerPhone"
-                  placeholder="مثال: 05xxxxxxxx"
-                  value={orderForm.customerPhone}
-                  onChange={(e) => setOrderForm(prev => ({ ...prev, customerPhone: e.target.value }))}
-                  data-testid="input-customer-phone"
-                  required
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="customerEmail" className="text-sm font-medium text-gray-700 mb-1">البريد الإلكتروني (اختياري)</Label>
-                <Input
-                  id="customerEmail"
-                  placeholder="email@example.com"
-                  value={orderForm.customerEmail}
-                  onChange={(e) => setOrderForm(prev => ({ ...prev, customerEmail: e.target.value }))}
-                  type="email"
-                  data-testid="input-customer-email"
-                />
-              </div>
+              <Input
+                placeholder="الاسم *"
+                value={orderForm.customerName}
+                onChange={(e) => setOrderForm(prev => ({ ...prev, customerName: e.target.value }))}
+                data-testid="input-customer-name"
+              />
+              <Input
+                placeholder="رقم الهاتف *"
+                value={orderForm.customerPhone}
+                onChange={(e) => setOrderForm(prev => ({ ...prev, customerPhone: e.target.value }))}
+                data-testid="input-customer-phone"
+              />
+              <Input
+                placeholder="البريد الإلكتروني"
+                value={orderForm.customerEmail}
+                onChange={(e) => setOrderForm(prev => ({ ...prev, customerEmail: e.target.value }))}
+                data-testid="input-customer-email"
+              />
             </div>
           </CardContent>
         </Card>
@@ -337,16 +300,14 @@ export default function Cart() {
 
             {/* Manual Address Input */}
             <div className="space-y-2">
-              <Label htmlFor="deliveryAddress" className="text-sm font-medium text-gray-700">أو أدخل العنوان يدوياً:</Label>
+              <label className="text-sm font-medium text-gray-700">أو أدخل العنوان يدوياً:</label>
               <Textarea
-                id="deliveryAddress"
-                placeholder="أدخل عنوان التوصيل بالتفصيل (الشارع، الحي، المدينة) *"
+                placeholder="أدخل عنوان التوصيل بالتفصيل *"
                 value={orderForm.deliveryAddress}
                 onChange={(e) => setOrderForm(prev => ({ ...prev, deliveryAddress: e.target.value }))}
                 rows={3}
                 data-testid="input-delivery-address"
                 className="border-gray-300 focus:border-red-500 focus:ring-red-500"
-                required
               />
             </div>
 
@@ -375,17 +336,13 @@ export default function Cart() {
               <Calendar className="h-5 w-5 text-red-500" />
               <h3 className="font-semibold text-gray-800">ملاحظات الطلب</h3>
             </div>
-            <div>
-              <Label htmlFor="orderNotes" className="text-sm font-medium text-gray-700 mb-1">ملاحظات إضافية (اختياري)</Label>
-              <Textarea
-                id="orderNotes"
-                placeholder="أضف ملاحظات للطلب (مثال: التعليمات، إرشادات التوصيل، ...)"
-                value={orderForm.notes}
-                onChange={(e) => setOrderForm(prev => ({ ...prev, notes: e.target.value }))}
-                rows={2}
-                data-testid="input-order-notes"
-              />
-            </div>
+            <Textarea
+              placeholder="أضف ملاحظات للطلب (اختياري)"
+              value={orderForm.notes}
+              onChange={(e) => setOrderForm(prev => ({ ...prev, notes: e.target.value }))}
+              rows={2}
+              data-testid="input-order-notes"
+            />
           </CardContent>
         </Card>
 
@@ -414,39 +371,6 @@ export default function Cart() {
                 في وقت لاحق
               </Button>
             </div>
-
-            {orderForm.deliveryTime === 'later' && (
-              <div className="mt-4 space-y-3">
-                <div>
-                  <Label htmlFor="deliveryDate" className="text-sm font-medium text-gray-700 mb-1">تاريخ التوصيل</Label>
-                  <Input
-                    id="deliveryDate"
-                    type="date"
-                    value={orderForm.deliveryDate}
-                    onChange={(e) => setOrderForm(prev => ({ ...prev, deliveryDate: e.target.value }))}
-                    min={new Date().toISOString().split('T')[0]}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="deliveryTimeSlot" className="text-sm font-medium text-gray-700 mb-1">وقت التوصيل</Label>
-                  <Select
-                    value={orderForm.deliveryTimeSlot}
-                    onValueChange={(value) => setOrderForm(prev => ({ ...prev, deliveryTimeSlot: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="اختر وقت التوصيل" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="09:00-12:00">9:00 ص - 12:00 م</SelectItem>
-                      <SelectItem value="12:00-15:00">12:00 م - 3:00 م</SelectItem>
-                      <SelectItem value="15:00-18:00">3:00 م - 6:00 م</SelectItem>
-                      <SelectItem value="18:00-21:00">6:00 م - 9:00 م</SelectItem>
-                      <SelectItem value="21:00-24:00">9:00 م - 12:00 ص</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            )}
           </CardContent>
         </Card>
 
@@ -455,7 +379,7 @@ export default function Cart() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-4">
               <DollarSign className="h-5 w-5 text-red-500" />
-              <h3 className="font-semibold text-gray-800">طريقة الدفع</h3>
+              <h3 className="font-semibold text-gray-800">الدفع ( الدفع عند الاستلام )</h3>
             </div>
 
             <RadioGroup 
@@ -463,33 +387,31 @@ export default function Cart() {
               onValueChange={(value) => setOrderForm(prev => ({ ...prev, paymentMethod: value }))}
               className="space-y-3"
             >
-              <div className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+              <div className="flex items-center space-x-2">
                 <RadioGroupItem value="cash" id="cash" />
-                <Label htmlFor="cash" className="flex-1 cursor-pointer text-gray-800 font-medium">
+                <Label htmlFor="cash" className="flex-1 cursor-pointer">
                   الدفع عند الاستلام
                 </Label>
               </div>
               
-              <div className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+              <div className="flex items-center space-x-2">
                 <RadioGroupItem value="wallet" id="wallet" />
-                <Label htmlFor="wallet" className="flex-1 cursor-pointer text-gray-800 font-medium">
-                  الدفع من رصيد المحفظة
+                <Label htmlFor="wallet" className="flex-1 cursor-pointer">
+                  الدفع من رصيد
                 </Label>
               </div>
               
-              <div className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+              <div className="flex items-center space-x-2">
                 <RadioGroupItem value="digital" id="digital" />
-                <Label htmlFor="digital" className="flex-1 cursor-pointer text-gray-800 font-medium">
+                <Label htmlFor="digital" className="flex-1 cursor-pointer">
                   الدفع باستخدام المحفظة الإلكترونية
                 </Label>
               </div>
             </RadioGroup>
 
-            {orderForm.paymentMethod === 'wallet' && (
-              <Button className="w-full mt-4 bg-orange-500 hover:bg-orange-600 text-white font-medium py-3">
-                إضافة رصيد للمحفظة
-              </Button>
-            )}
+            <Button className="w-full mt-4 bg-orange-500 hover:bg-orange-600 text-white font-medium py-3">
+              إضافة رصيد
+            </Button>
           </CardContent>
         </Card>
 
@@ -504,28 +426,48 @@ export default function Cart() {
                 </span>
               </div>
               
+              {/* رسوم التوصيل مع معلومات المسافة */}
               <div className="flex justify-between items-center">
-                <span className="text-gray-600">رسوم التوصيل</span>
-                <span className="text-gray-900" data-testid="text-delivery-fee">
-                  {deliveryFee} ريال
-                  {restaurantData && (
-                    <span className="text-xs text-gray-500 block">
-                      حسب سياسة {restaurantData.name}
+                <div className="flex flex-col">
+                  <span className="text-gray-600">رسوم التوصيل</span>
+                  {deliveryInfo?.distance && deliveryInfo.distance > 0 && (
+                    <span className="text-xs text-gray-400">
+                      المسافة: {deliveryInfo.distance.toFixed(1)} كم
                     </span>
                   )}
-                </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {isCalculatingFee ? (
+                    <div className="flex items-center gap-1 text-gray-500">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="text-sm">جاري الحساب...</span>
+                    </div>
+                  ) : deliveryInfo?.isFreeDelivery ? (
+                    <div className="flex flex-col items-end">
+                      <span className="text-green-600 font-medium" data-testid="text-delivery-fee">
+                        مجاني! 🎉
+                      </span>
+                      <span className="text-xs text-green-500">
+                        {deliveryInfo.freeDeliveryReason}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-gray-900" data-testid="text-delivery-fee">
+                      {subtotal > 0 ? `${deliveryFee} ريال` : '0 ريال'}
+                    </span>
+                  )}
+                </div>
               </div>
-              
-              {restaurantData?.minimumOrder && subtotal > 0 && (
+
+              {/* وقت التوصيل المقدر */}
+              {deliveryInfo?.estimatedTime && (
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-500">الحد الأدنى للطلب</span>
-                  <span className="text-gray-700">
-                    {parseFloat(restaurantData.minimumOrder)} ريال
-                    {subtotal >= parseFloat(restaurantData.minimumOrder) ? (
-                      <span className="text-green-600 text-xs block">✓ متوفر</span>
-                    ) : (
-                      <span className="text-red-600 text-xs block">✗ غير متوفر</span>
-                    )}
+                  <span className="text-gray-500 flex items-center gap-1">
+                    <Clock className="h-4 w-4" />
+                    وقت التوصيل المتوقع
+                  </span>
+                  <span className="text-gray-700 font-medium">
+                    {deliveryInfo.estimatedTime}
                   </span>
                 </div>
               )}
@@ -537,20 +479,12 @@ export default function Cart() {
                 </span>
               </div>
               
-              <div className="text-sm text-gray-500 text-center mt-4">
-                {items.length > 0 && restaurantData ? (
-                  <p>
-                    الطلب من: <span className="font-medium">{restaurantData.name}</span>
-                    {restaurantData.deliveryTime && (
-                      <span className="block mt-1">
-                        وقت التوصيل المتوقع: {restaurantData.deliveryTime}
-                      </span>
-                    )}
-                  </p>
-                ) : (
-                  <p>يرجى الاتصال بالإنترنت وتحديد عنوان التوصيل</p>
-                )}
-              </div>
+              {!orderForm.locationData && subtotal > 0 && (
+                <div className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg text-center">
+                  <MapPin className="h-4 w-4 inline-block mr-1" />
+                  حدد موقعك على الخريطة لحساب رسوم التوصيل بدقة
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -562,18 +496,11 @@ export default function Cart() {
               <Button 
                 className="w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-3 text-lg"
                 onClick={handlePlaceOrder}
-                disabled={placeOrderMutation.isPending || 
-                  (restaurantData?.minimumOrder && subtotal < parseFloat(restaurantData.minimumOrder))}
+                disabled={placeOrderMutation.isPending}
                 data-testid="button-place-order"
               >
-                {placeOrderMutation.isPending ? 'جاري تأكيد الطلب...' : `تأكيد الطلب - ${total} ريال`}
+                {placeOrderMutation.isPending ? 'جاري تأكيد الطلب...' : `تأكيد الطلب - ${total}ريال`}
               </Button>
-              
-              {restaurantData?.minimumOrder && subtotal < parseFloat(restaurantData.minimumOrder) && (
-                <p className="text-red-600 text-sm text-center mt-2">
-                  يجب أن يكون المجموع الفرعي {parseFloat(restaurantData.minimumOrder)} ريال على الأقل
-                </p>
-              )}
             </CardContent>
           </Card>
         )}

@@ -16,6 +16,8 @@ import AdminDriversAdvanced from "./AdminDriversAdvanced";
 import AdminRestaurantsAdvanced from "./AdminRestaurantsAdvanced";
 import RatingsManagement from "./RatingsManagement";
 import WalletManagement from "./WalletManagement";
+import AdminDeliveryFees from "./admin/AdminDeliveryFees";
+import AdminRestaurantAccounts from "./admin/AdminRestaurantAccounts";
 import NotFound from "./not-found";
 import React from "react";
 
@@ -127,6 +129,8 @@ export const AdminApp: React.FC<AdminAppProps> = () => {
         <Route path="/admin/ui-settings" component={AdminUiSettings} />
         <Route path="/admin/ratings" component={RatingsManagement} />
         <Route path="/admin/wallet" component={WalletManagement} />
+        <Route path="/admin/delivery-fees" component={AdminDeliveryFees} />
+        <Route path="/admin/restaurant-accounts" component={AdminRestaurantAccounts} />
         <Route component={NotFound} />
       </Switch>
     </AdminLayout>
