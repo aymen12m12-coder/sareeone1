@@ -214,6 +214,10 @@ router.put("/:id/assign-driver", async (req, res) => {
       return res.status(400).json({ error: "السائق غير متاح حالياً" });
     }
 
+    // جلب بيانات المطعم
+    const restaurant = order.restaurantId ? await storage.getRestaurant(order.restaurantId) : null;
+    const restaurantName = restaurant?.name || 'مطعم غير محدد';
+
     // تحديث الطلب
     const updatedOrder = await storage.updateOrder(id, {
       driverId,
@@ -230,7 +234,7 @@ router.put("/:id/assign-driver", async (req, res) => {
       await storage.createNotification({
         type: 'new_order_assigned',
         title: 'طلب جديد مُعين لك',
-        message: `تم تعيينك لتوصيل الطلب رقم ${order.orderNumber} من مطعم ${restaurant.name}`,
+        message: `تم تعيينك لتوصيل الطلب رقم ${order.orderNumber} من ${restaurantName}`,
         recipientType: 'driver',
         recipientId: driverId,
         orderId: id,
