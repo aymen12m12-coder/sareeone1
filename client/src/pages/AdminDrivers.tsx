@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
+import { formatCurrency, formatDate } from '@/lib/utils';
 import type { Driver, DriverTransaction, DriverBalance, DriverCommission } from '@shared/schema';
 
 export default function AdminDrivers() {
@@ -286,6 +287,15 @@ export default function AdminDrivers() {
       return;
     }
 
+    if (formData.commissionRate < 0 || formData.commissionRate > 100) {
+      toast({
+        title: "خطأ",
+        description: "يرجى إدخال نسبة عمولة صحيحة (0-100)",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!editingDriver && !formData.password.trim()) {
       toast({
         title: "خطأ",
@@ -383,24 +393,9 @@ export default function AdminDrivers() {
     });
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('ar-SA', {
-      style: 'currency',
-      currency: 'SAR',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(amount);
-  };
 
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('ar-SA', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
+
+
 
   const getTransactionTypeLabel = (type: string) => {
     const labels: Record<string, string> = {

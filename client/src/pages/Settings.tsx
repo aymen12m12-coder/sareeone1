@@ -134,8 +134,8 @@ export default function Settings() {
           value: settings.currency,
           options: [
             { value: 'YER', label: 'الريال اليمني (YER)' },
-            { value: 'SAR', label: 'الريال السعودي (SAR)' },
             { value: 'USD', label: 'الدولار الأمريكي (USD)' },
+            { value: 'SAR', label: 'الريال السعودي (SAR)' },
           ],
           onChange: (value: string) => handleSimpleSettingChange('currency', value),
         },

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import RestaurantCard from '../components/RestaurantCard';
 import { Button } from '@/components/ui/button';
+import { formatCurrency } from '@/lib/utils';
 import type { Restaurant, Category, MenuItem } from '../../../shared/schema.js';
 
 export default function SearchPage() {
@@ -151,7 +152,7 @@ export default function SearchPage() {
                           <div className="flex-1">
                             <h4 className="font-medium">{item.name}</h4>
                             <p className="text-sm text-muted-foreground">{item.description}</p>
-                            <p className="text-sm font-semibold text-primary">{item.price} ر.س</p>
+                            <p className="text-sm font-semibold text-primary">{formatCurrency(item.price)}</p>
                           </div>
                         </div>
                       ))}

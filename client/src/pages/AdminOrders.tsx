@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
+import { formatCurrency, formatDate } from '@/lib/utils';
 import type { Order, Driver } from '@shared/schema';
 
 export default function AdminOrders() {
@@ -266,13 +267,7 @@ export default function AdminOrders() {
                           <div>
                             <CardTitle className="text-lg">طلب #{order.id}</CardTitle>
                             <p className="text-sm text-muted-foreground">
-                              {new Date(order.createdAt).toLocaleDateString('ar-YE', {
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}
+                              {formatDate(order.createdAt)}
                             </p>
                           </div>
                         </div>
@@ -307,7 +302,7 @@ export default function AdminOrders() {
                           {items.map((item: any, index: number) => (
                             <div key={index} className="flex justify-between items-center text-sm">
                               <span className="text-foreground">{item.name} × {item.quantity}</span>
-                              <span className="text-muted-foreground">{item.price * item.quantity} ريال</span>
+                              <span className="text-muted-foreground">{formatCurrency(item.price * item.quantity)}</span>
                             </div>
                           ))}
                         </div>
@@ -315,15 +310,15 @@ export default function AdminOrders() {
                         <div className="border-t border-border mt-2 pt-2">
                           <div className="flex justify-between items-center text-sm">
                             <span className="text-muted-foreground">المجموع الفرعي:</span>
-                            <span className="text-foreground">{order.subtotal} ريال</span>
+                            <span className="text-foreground">{formatCurrency(order.subtotal)}</span>
                           </div>
                           <div className="flex justify-between items-center text-sm">
                             <span className="text-muted-foreground">رسوم التوصيل:</span>
-                            <span className="text-foreground">{order.deliveryFee} ريال</span>
+                            <span className="text-foreground">{formatCurrency(order.deliveryFee)}</span>
                           </div>
                           <div className="flex justify-between items-center font-semibold">
                             <span className="text-foreground">المجموع:</span>
-                            <span className="text-primary">{order.totalAmount} ريال</span>
+                            <span className="text-primary">{formatCurrency(order.totalAmount)}</span>
                           </div>
                         </div>
                       </div>

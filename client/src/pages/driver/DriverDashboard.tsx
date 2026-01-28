@@ -14,6 +14,7 @@ import {
   RefreshCw, Eye, MessageCircle, Store, Map, TrendingUp, Activity 
 } from 'lucide-react';
 import type { Order, Driver } from '@shared/schema';
+import { formatCurrency, formatDate } from '@/lib/utils';
 
 interface DriverDashboardProps {
   onLogout: () => void;
@@ -335,10 +336,7 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({ onLogout }) =>
     }
   };
 
-  const formatCurrency = (amount: string | number) => {
-    const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return `${num.toFixed(2)} ريال`;
-  };
+
 
   // 🔄 تصنيف الطلبات - الإصاح المعدل
   const categorizeOrders = () => {
@@ -377,7 +375,7 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({ onLogout }) =>
               <h4 className="font-bold text-lg">طلب #{order.orderNumber || order.id.slice(-8)}</h4>
               <p className="text-sm text-muted-foreground">{order.customerName}</p>
               <p className="text-xs text-muted-foreground">
-                {new Date(order.createdAt).toLocaleString('ar-YE')}
+                {formatDate(order.createdAt)}
               </p>
             </div>
             <div className="text-left">
